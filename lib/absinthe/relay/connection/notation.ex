@@ -223,7 +223,7 @@ defmodule Absinthe.Relay.Connection.Notation do
 
     quote do
       field :page_info, type: non_null(:page_info)
-      field :edges, type: list_of(unquote(edge_type))
+      field :edges, type: non_null(list_of(non_null(unquote(edge_type))))
 
       private(
         unquote(private_category_node),
@@ -248,7 +248,7 @@ defmodule Absinthe.Relay.Connection.Notation do
         :node,
         quote do
           @desc "The item at the end of the edge"
-          field :node, unquote(node_type)
+          field :node, non_null(unquote(node_type))
         end
       )
 
