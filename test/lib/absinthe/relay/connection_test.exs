@@ -52,7 +52,9 @@ defmodule Absinthe.Relay.ConnectionTest do
       field :name, :string
     end
 
-    connection node_type: :user do
+    connection node_type: non_null(:team)
+
+    connection node_type: non_null(:user) do
       edge do
         field :role, :string
       end
@@ -99,6 +101,18 @@ defmodule Absinthe.Relay.ConnectionTest do
             {:ok, Map.get(@teams, id)}
         end
       end
+
+      connection field :teams, node_type: :team do
+        resolve fn
+          resolve_args, %{} ->
+            Absinthe.Relay.Connection.from_list(
+              for pair <- @teams do
+                pair
+              end,
+              resolve_args
+            )
+        end
+      end
     end
 
     node interface do
@@ -109,6 +123,20 @@ defmodule Absinthe.Relay.ConnectionTest do
         _, _ ->
           nil
       end
+    end
+  end
+
+  describe "Defining a connection node type as non-null with a standard edge" do
+    test " sets the correct type" do
+      team_edge = Absinthe.Schema.lookup_type(CustomConnectionWithEdgeInfoSchema, :team_edge)
+      assert team_edge.fields[:node].type == %Absinthe.Type.NonNull{of_type: :team}
+    end
+  end
+
+  describe "Defining a connection node type as non-null with a custom edge" do
+    test " sets the correct type" do
+      user_edge = Absinthe.Schema.lookup_type(CustomConnectionWithEdgeInfoSchema, :user_edge)
+      assert user_edge.fields[:node].type == %Absinthe.Type.NonNull{of_type: :user}
     end
   end
 
@@ -155,7 +183,7 @@ defmodule Absinthe.Relay.ConnectionTest do
       end
     end
 
-    connection(:favorite_pets_bare, node_type: :pet)
+    connection :favorite_pets_bare, node_type: :pet
 
     connection :favorite_pets, node_type: :pet do
       field :fav_twice_edges_count, :integer do
@@ -173,6 +201,8 @@ defmodule Absinthe.Relay.ConnectionTest do
       end
     end
 
+    connection(:favorite_pets_non_nullable, node_type: non_null(:pet))
+
     node object(:person) do
       field :name, :string
       field :age, :string
@@ -189,6 +219,16 @@ defmodule Absinthe.Relay.ConnectionTest do
 
       @desc "The favorite pets for a person"
       connection field :favorite_pets, connection: :favorite_pets do
+        resolve fn resolve_args, %{source: person} ->
+          Absinthe.Relay.Connection.from_list(
+            Enum.map(person.favorite_pets, &Map.get(@pets, &1)),
+            resolve_args
+          )
+        end
+      end
+
+      @desc "The favorite pets for a person (non-nullable)"
+      connection field :favorite_pets_non_nullable, connection: :favorite_pets_non_nullable do
         resolve fn resolve_args, %{source: person} ->
           Absinthe.Relay.Connection.from_list(
             Enum.map(person.favorite_pets, &Map.get(@pets, &1)),
@@ -214,6 +254,58 @@ defmodule Absinthe.Relay.ConnectionTest do
         _, _ ->
           nil
       end
+    end
+  end
+
+  describe "Defining a connection node type as non-null with a connection name" do
+    test " sets the correct type" do
+      edge =
+        Absinthe.Schema.lookup_type(
+          CustomConnectionAndEdgeFieldsSchema,
+          :favorite_pets_non_nullable_edge
+        )
+
+      assert edge.fields[:node].type == %Absinthe.Type.NonNull{of_type: :pet}
+    end
+  end
+
+  describe "Using a connection with non-nullable node type" do
+    test " returns the values as expected" do
+      result =
+        """
+          query FirstPetName($personId: ID!) {
+            node(id: $personId) {
+              ... on Person {
+                favoritePetsNonNullable(first: 1) {
+                  edges {
+                    node {
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        """
+        |> Absinthe.run(
+          CustomConnectionAndEdgeFieldsSchema,
+          variables: %{"personId" => @jack_global_id}
+        )
+
+      assert {:ok,
+              %{
+                data: %{
+                  "node" => %{
+                    "favoritePetsNonNullable" => %{
+                      "edges" => [
+                        %{
+                          "node" => %{"name" => "Jock"}
+                        }
+                      ]
+                    }
+                  }
+                }
+              }} == result
     end
   end
 
