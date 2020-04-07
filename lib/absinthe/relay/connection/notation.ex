@@ -219,10 +219,21 @@ defmodule Absinthe.Relay.Connection.Notation do
   def record_connection_field!(env, identifier, naming, attrs, block) do
     pagination = Keyword.get(attrs, :paginate, :both)
 
+    type =
+      case naming do
+        %{non_null_node_type: true} ->
+          quote do
+            %Absinthe.Type.NonNull{of_type: unquote(naming.connection_type_identifier)}
+          end
+
+        _ ->
+          naming.connection_type_identifier
+      end
+
     Notation.record_field!(
       env,
       identifier,
-      [type: naming.connection_type_identifier] ++ Keyword.delete(attrs, :paginate),
+      [type: type] ++ Keyword.delete(attrs, :paginate),
       [paginate_args(pagination), block]
     )
   end
